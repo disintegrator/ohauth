@@ -1,11 +1,12 @@
 package ohauth
 
-import "time"
-
-type TokenType string
+import (
+	"net/url"
+	"time"
+)
 
 const (
-	Bearer TokenType = "Bearer"
+	BearerToken = "Bearer"
 )
 
 type TokenClaims struct {
@@ -16,29 +17,31 @@ type TokenClaims struct {
 	Issuer   string `json:"iss"`
 	Subject  string `json:"sub"`
 	Scope    *Scope `json:"scope,omitempty"`
+	Nonce    string `json:"nonce,omitempty"`
 }
 
-func NewTokenClaims(iat time.Time, exp time.Time) (*TokenClaims, error) {
-	id, err := randID()
-	if err != nil {
-		return nil, err
-	}
+func NewTokenClaims(iat time.Time, exp time.Time) *TokenClaims {
 	return &TokenClaims{
-		ID:      id,
+		ID:      randID(),
 		Expires: exp.Unix(),
 		Issued:  iat.Unix(),
-	}, nil
+	}
 }
 
 type TokenResponse struct {
 	AccessToken  string    `json:"access_token"`
 	RefreshToken string    `json:"refresh_token,omitempty"`
-	TokenType    TokenType `json:"token_type"`
+	TokenType    string    `json:"token_type"`
 	Expires      time.Time `json:"expires_in"`
 	Scope        *Scope    `json:"scope"`
 }
 
 type CodeResponse struct {
-	Code  string `json:"code"`
-	State string `json:"state"`
+	Code string `json:"code"`
+}
+
+func (r *CodeResponse) Values() url.Values {
+	v := url.Values{}
+	v.Set("code", r.Code)
+	return v
 }

@@ -2,23 +2,31 @@ package ohauth
 
 import (
 	"encoding/json"
+	"errors"
 	"net/url"
+	"strings"
 )
 
-// URL is similar to the standard net/url.URL type except that it can be
+// StrictURL is similar to the standard net/url.URL type except that it can be
 // json marshalled and unmarshalled and forces all parsed urls to https protocol
-type URL url.URL
+type StrictURL url.URL
 
-func ParseURL(raw string) (*URL, error) {
+func ParseURL(raw string) (*StrictURL, error) {
 	u, err := url.Parse(raw)
 	if err != nil {
 		return nil, err
 	}
+	u.Host = strings.TrimSpace(u.Host)
 	u.Scheme = "https"
-	return (*URL)(u), err
+	u.RawQuery = ""
+	u.Fragment = ""
+	if u.Host == "" || !u.IsAbs() {
+		return nil, errors.New("absolute urls with host are required")
+	}
+	return (*StrictURL)(u), err
 }
 
-func MustParseURL(raw string) *URL {
+func MustParseURL(raw string) *StrictURL {
 	u, err := ParseURL(raw)
 	if err != nil {
 		panic(err)
@@ -26,12 +34,12 @@ func MustParseURL(raw string) *URL {
 	return u
 }
 
-func (u *URL) MarshalJSON() ([]byte, error) {
+func (u *StrictURL) MarshalJSON() ([]byte, error) {
 	c := (*url.URL)(u)
 	return json.Marshal(c.String())
 }
 
-func (u *URL) UnmarshalJSON(b []byte) error {
+func (u *StrictURL) UnmarshalJSON(b []byte) error {
 	var s string
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
@@ -39,26 +47,40 @@ func (u *URL) UnmarshalJSON(b []byte) error {
 	if in, err := url.Parse(s); err != nil {
 		return err
 	} else {
-		*u = URL(*in)
+		*u = StrictURL(*in)
 	}
 	return nil
 }
 
-func (u *URL) Unbox() *url.URL {
+func (u *StrictURL) Unbox() *url.URL {
 	return (*url.URL)(u)
 }
 
-func (u *URL) String() string {
+func (u *StrictURL) String() string {
 	if u == nil {
 		return ""
 	}
 	return u.Unbox().String()
 }
 
-func (u1 *URL) Compare(u2 *URL) bool {
-	if u1 == nil || u2 == nil {
+func (u *StrictURL) Compare(u2 *StrictURL) bool {
+	if u == nil || u2 == nil {
 		return false
 	}
-	s1, s2 := u1.String(), u2.String()
+	s1, s2 := u.String(), u2.String()
 	return s1 != "" && s2 != "" && s1 == s2
+}
+
+func (u *StrictURL) Clone() *StrictURL {
+	c, err := ParseURL(u.String())
+	if err != nil {
+		panic(err)
+	}
+	return c
+}
+
+func (u *StrictURL) StringWithParams(v url.Values) string {
+	c := u.Clone()
+	c.RawQuery = v.Encode()
+	return c.String()
 }

@@ -1,77 +1,139 @@
 package ohauth
 
+import (
+	"fmt"
+	"net/http"
+	"time"
+
+	"github.com/dgrijalva/jwt-go"
+)
+
+var defaultClock = &DefaultClock{}
+var defaultIssuer = &DefaultIssuer{}
+var defaultTokenizer = NewJWTTokenizer(jwt.SigningMethodES256)
+
+type Provider struct {
+	// Authorization and Authentication endpoints
+	URL *StrictURL
+	// Authenticator is used for to parse sessions and authenticate via password grants
+	Authenticator Authenticator
+	// Data store for clients and tokens
+	Store Store
+	// Clock that generates timestamps for checking and issuing tokens
+	Clock Clock
+	// Tokenizer is required to generate code, id, access and refresh tokens
+	Tokenizer Tokenizer
+	// Issuer is used to determine claim values when issuing tokens
+	Issuer Issuer
+}
+
+func NewProvider(u *StrictURL, authn Authenticator, store Store) *Provider {
+	return &Provider{
+		u,
+		authn,
+		store,
+		defaultClock,
+		defaultTokenizer,
+		defaultIssuer,
+	}
+}
+
 type CodeRequest struct {
-	Provider     *Provider
-	Client       *Client
-	SessionToken *TokenClaims
-	Scope        *Scope
-	State        string
+	Timestamp time.Time
+	Session   *TokenClaims
+	Client    *Client
+	Scope     *Scope
+	Redirect  *StrictURL
+	State     string
 }
 
-func (cr *CodeRequest) ValidateClient() (*Error, error) {
-	p := cr.Provider
-	client := cr.Client
-
-	if client == nil {
-		return InvalidClient.DocumentedError(
-			p, "client not found", cr.State,
-		), nil
-	}
-
-	if client.GrantType != AuthorizationCode {
-		return InvalidRequest.DocumentedError(
-			p, "client cannot use specified grant type", cr.State,
-		), nil
-	}
-
-	if !client.Scope.Contains(cr.Scope) {
-		return InvalidScope.DocumentedError(
-			p, "client cannot issue requested scope", cr.State,
-		), nil
-	}
-	return nil, nil
-}
-
-func (cr *CodeRequest) ValidateSession() (*Error, error) {
+func (p *Provider) ValidateCodeRequest(cr *CodeRequest) error {
 	c := cr.Client
-	p := cr.Provider
-	st := cr.SessionToken
-	now := p.Now().Unix()
 
-	if st.Issued > now {
-		return AccessDenied.DocumentedError(p, "Invalid session", cr.State), nil
+	if c == nil {
+		return NewError(InvalidClient, "Client ID is invalid")
 	}
-	if st.Expires < now {
-		return AccessDenied.DocumentedError(p, "Token expired", cr.State), nil
+	if c.Status != ClientActive {
+		return NewError(InvalidClient, "Client is not active")
+	}
+	if c.GrantType != AuthorizationCode {
+		return NewError(InvalidRequest, "Client cannot use specified grant type")
+	}
+	if c.RedirectURI.String() != cr.Redirect.String() {
+		return NewError(InvalidRequest, "Redirect URI is invalid")
+	}
+	if c.RedirectURI.String() != cr.Redirect.String() {
+		return NewError(InvalidRequest, "Redirect URI is invalid")
+	}
+	if !c.Scope.Contains(cr.Scope) {
+		return NewError(InvalidScope, "Client cannot offer requested scope")
 	}
 
-	if st.Issuer == "" || st.Issuer != p.Base.String() {
-		return AccessDenied.DocumentedError(p, "Token not issued by client", cr.State), nil
+	return nil
+}
+
+func (p *Provider) CheckAuthorization(cr *CodeRequest) (*CodeResponse, error) {
+	if err := p.ValidateCodeRequest(cr); err != nil {
+		return nil, err
 	}
 
-	if st.Audience != c.ID {
-		return AccessDenied.DocumentedError(p, "Authentication failed", cr.State), nil
+	codeKey := fmt.Sprintf("%s:%s", cr.Client.ID, cr.Session.Subject)
+	tc, err := p.Store.FetchToken(codeKey)
+	if err != nil || tc == nil || tc.Expires < cr.Timestamp.Unix() || tc.Scope.Equals(cr.Scope) {
+		return nil, err
 	}
 
-	blacklisted, err := p.TokenBlacklisted(st.ID)
+	code, err := p.Tokenizer.Tokenize(tc, cr.Client.SigningKey)
 	if err != nil {
 		return nil, err
 	}
-	if blacklisted {
-		return AccessDenied.DocumentedError(p, "Authentication failed", cr.State), nil
-	}
-
-	return nil, nil
+	return &CodeResponse{code}, nil
+	//return &CodeResponse{code, cr.State}, nil
 }
 
-func (cr *CodeRequest) Validate() (*Error, error) {
-	verr, err := cr.ValidateClient()
-	if verr != nil || err != nil {
-		return verr, err
+func (p *Provider) AuthorizeWithCode(cr *CodeRequest) (*CodeResponse, error) {
+	res, err := p.CheckAuthorization(cr)
+	if err != nil {
+		return nil, err
 	}
-	verr, err = cr.ValidateSession()
-	if verr != nil || err != nil {
-		return verr, err
+	if res != nil {
+		return res, nil
 	}
-	return nil, nil
+
+	now := p.Clock.Now()
+	tc := NewTokenClaims(now, now.Add(p.Issuer.ExpiryForCode()))
+	tc.Issuer = p.URL.String()
+	tc.Audience = cr.Client.ID
+	tc.Subject = cr.Session.Subject
+	tc.Scope = cr.Scope
+
+	if err := p.Store.RecordToken(tc); err != nil {
+		return nil, err
+	}
+
+	code, err := p.Tokenizer.Tokenize(tc, cr.Client.SigningKey)
+	if err != nil {
+		return nil, err
+	}
+
+	return &CodeResponse{code}, nil
+	//return &CodeResponse{code, cr.State}, nil
+}
+
+func (p *Provider) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/authorize", func(w http.ResponseWriter, r *http.Request) {
+		handleAuthorize(p, w, r)
+	})
+	mux.HandleFunc("/token", func(w http.ResponseWriter, r *http.Request) {
+		handleToken(p, w, r)
+	})
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" || r.Method == "POST" {
+			mux.ServeHTTP(w, r)
+		} else {
+			abort(w, http.StatusMethodNotAllowed, "Method not allowed")
+		}
+	})
 }

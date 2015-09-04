@@ -3,6 +3,7 @@ package ohauth
 import (
 	"encoding/json"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 )
@@ -14,20 +15,15 @@ type Scope struct {
 	set map[string]bool
 }
 
-func (s *Scope) addOne(op string) {
-	s.Lock()
-	defer s.Unlock()
-	if !opRE.MatchString(op) {
-		return
+func (s *Scope) String() string {
+	xs := make([]string, len(s.set))
+	i := 0
+	for k := range s.set {
+		xs[i] = k
+		i++
 	}
-	clean := strings.Split(op, ":")
-	for i := 1; i <= len(clean); i++ {
-		segment := strings.Join(clean[:i], ":")
-		if _, found := s.set[segment]; found {
-			return
-		}
-	}
-	s.set[op] = true
+	sort.Strings(xs)
+	return strings.Join(xs, ",")
 }
 
 func ParseScope(raw string) *Scope {
@@ -41,7 +37,23 @@ func (s *Scope) Len() int {
 	return len(s.set)
 }
 
+func (s *Scope) addOne(op string) {
+	if !opRE.MatchString(op) {
+		return
+	}
+	clean := strings.Split(op, ":")
+	for i := 1; i <= len(clean); i++ {
+		segment := strings.Join(clean[:i], ":")
+		if _, found := s.set[segment]; found {
+			return
+		}
+	}
+	s.set[op] = true
+}
+
 func (s *Scope) Add(ops ...string) {
+	s.Lock()
+	defer s.Unlock()
 	for _, scope := range ops {
 		s.addOne(scope)
 	}
@@ -64,6 +76,21 @@ func (s *Scope) Contains(sub *Scope) bool {
 		found = found || s.Has(k)
 	}
 	return found
+}
+
+func (a *Scope) Equals(b *Scope) bool {
+	la := len(a.set)
+	lb := len(b.set)
+	if la != lb {
+		return false
+	}
+
+	for k := range b.set {
+		if _, exists := a.set[k]; !exists {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *Scope) MarshalJSON() ([]byte, error) {
