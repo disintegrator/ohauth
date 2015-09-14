@@ -15,6 +15,19 @@ type Scope struct {
 	set map[string]bool
 }
 
+func NewScope(actions ...string) *Scope {
+	s := &Scope{set: make(map[string]bool, 0)}
+	s.Add(actions...)
+	return s
+}
+
+func ParseScope(raw string) *Scope {
+	split := strings.Split(raw, ",")
+	scope := &Scope{set: make(map[string]bool, 0)}
+	scope.Add(split...)
+	return scope
+}
+
 func (s *Scope) String() string {
 	xs := make([]string, len(s.set))
 	i := 0
@@ -24,13 +37,6 @@ func (s *Scope) String() string {
 	}
 	sort.Strings(xs)
 	return strings.Join(xs, ",")
-}
-
-func ParseScope(raw string) *Scope {
-	split := strings.Split(raw, ",")
-	scope := &Scope{set: make(map[string]bool, len(split))}
-	scope.Add(split...)
-	return scope
 }
 
 func (s *Scope) Len() int {
@@ -71,7 +77,7 @@ func (s *Scope) Has(op string) bool {
 }
 
 func (s *Scope) Contains(sub *Scope) bool {
-	found := false
+	found := len(sub.set) == 0
 	for k := range sub.set {
 		found = found || s.Has(k)
 	}

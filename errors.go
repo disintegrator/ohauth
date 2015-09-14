@@ -39,9 +39,12 @@ const (
 )
 
 var (
-	clientNotFound        = NewError(InvalidClient, "client not found")
-	unexpectedError       = NewError(ServerError, "unexpected error occured")
-	unsupportResponseType = NewError(UnsupportedResponseType, "unsupported response type")
-	badRedirect           = NewError(InvalidRequest, "invalid redirect uri")
-	accessDenied          = NewError(AccessDenied, "access denied")
+	ErrClientNotFound        = NewError(InvalidClient, "client not found")
+	ErrScopeNotAllowed       = NewError(InvalidScope, "client cannot offer requested scope")
+	ErrWrongGrant            = NewError(InvalidRequest, "client cannot use specified grant type")
+	ErrInvalidGrant          = NewError(InvalidRequest, "invalid grant type")
+	ErrUnexpected            = NewError(ServerError, "unexpected error occured")
+	ErrUnsupportResponseType = NewError(UnsupportedResponseType, "unsupported response type")
+	ErrBadRedirect           = NewError(InvalidRequest, "invalid redirect uri")
+	ErrAccessDenied          = NewError(AccessDenied, "access denied")
 )

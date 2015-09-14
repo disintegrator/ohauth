@@ -5,15 +5,16 @@ import "time"
 type Issuer interface {
 	ExpiryForToken(grantType string) time.Duration
 	ExpiryForCode() time.Duration
+	ScopePermitted(scope *Scope, grantType string) bool
 }
 
-type DefaultIssuer struct{}
+type defaultIssuer struct{}
 
-func (d *DefaultIssuer) ExpiryForCode() time.Duration {
+func (d *defaultIssuer) ExpiryForCode() time.Duration {
 	return 5 * time.Minute
 }
 
-func (d *DefaultIssuer) ExpiryForToken(grantType string) time.Duration {
+func (d *defaultIssuer) ExpiryForToken(grantType string) time.Duration {
 	switch grantType {
 	case Implicit:
 		return 2 * time.Hour
@@ -22,4 +23,8 @@ func (d *DefaultIssuer) ExpiryForToken(grantType string) time.Duration {
 	default:
 		return 24 * time.Hour
 	}
+}
+
+func (*defaultIssuer) ScopePermitted(*Scope, string) bool {
+	return true
 }

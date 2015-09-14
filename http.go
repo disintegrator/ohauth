@@ -1,144 +1,260 @@
 package ohauth
 
 import (
-	"fmt"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 	"time"
 )
 
-type formEncoded interface {
-	Values() url.Values
+func mergeValues(vs ...url.Values) url.Values {
+	out := url.Values{}
+	for _, v := range vs {
+		for key, val := range v {
+			out[key] = val
+		}
+	}
+	return out
+}
+
+type context struct {
+	provider  *Provider
+	writer    http.ResponseWriter
+	request   *http.Request
+	timestamp time.Time
+}
+
+func (c *context) redirect(u string) {
+	http.Redirect(c.writer, c.request, u, http.StatusFound)
+}
+
+func (c *context) fail(ru *StrictURL, e *Error, state string) {
+	v := mergeValues(url.Values{}, e.Values())
+	v.Set("state", state)
+	c.redirect(ru.StringWithParams(v))
+}
+
+func (c *context) json(s int, o interface{}) (err error) {
+	c.writer.Header().Set("Content-Type", "application/json; charset=utf-8")
+	b, err := json.Marshal(o)
+	if err != nil {
+		return
+	}
+	c.writer.WriteHeader(s)
+	_, err = c.writer.Write(b)
+	return
+}
+
+func (c *context) abort(status int, msg string) {
+	c.writer.WriteHeader(status)
+	c.writer.Write([]byte(msg))
+}
+
+func (c *context) redirectAuthorization() {
+	next := c.provider.URL.Clone()
+	next.Path += "/dialog"
+	next.RawQuery = c.request.URL.RawQuery
+	c.redirect(next.String())
 }
 
 type authorizationRequest struct {
-	ts       time.Time
 	client   *Client
 	session  *TokenClaims
 	redirect *StrictURL
 	scope    *Scope
 	state    string
+	prompted bool
 }
 
-func abort(w http.ResponseWriter, status int, msg string) {
-	w.WriteHeader(status)
-	w.Write([]byte(msg))
+var authorizeHandlers = map[string]func(*context, *authorizationRequest) error{
+	"code":  authorizeWithCode,
+	"token": authorizeWithToken,
 }
 
-func handleCodeAuthorize(p *Provider, r *authorizationRequest) (formEncoded, error) {
+func authorizeWithCode(ctx *context, r *authorizationRequest) error {
+	p := ctx.provider
 	c := r.client
+	cid := r.client.ID
+	uid := r.session.Subject
+	v := url.Values{}
+	v.Set("state", r.state)
+
 	if c.GrantType != AuthorizationCode {
-		return NewError(InvalidRequest, "Client cannot use specified grant type"), nil
-	}
-	if c.RedirectURI.String() != r.redirect.String() {
-		return NewError(InvalidRequest, "Redirect URI is invalid"), nil
-	}
-	if !c.Scope.Contains(r.scope) {
-		return NewError(InvalidScope, "Client cannot offer requested scope"), nil
+		ctx.fail(r.redirect, ErrWrongGrant, r.state)
+		return nil
 	}
 
-	codeKey := fmt.Sprintf("%s:%s", r.client.ID, r.session.Subject)
-	tc, err := p.Store.FetchToken(codeKey)
-	if err != nil || tc == nil || tc.Expires < r.ts.Unix() || tc.Scope.Equals(r.scope) {
-		return nil, err
-	}
+	tc := NewTokenClaims(ctx.timestamp, ctx.timestamp.Add(p.Issuer.ExpiryForCode()))
+	tc.ID = randID()
+	tc.Audience = cid
+	tc.Subject = r.session.Subject
+	tc.Issuer = p.URL.String()
+	tc.Scope = r.scope
+	tc.Grant = "authorization_code"
 
-	code, err := p.Tokenizer.Tokenize(tc, r.client.SigningKey)
+	a, err := p.Store.FetchAuthorization(cid, uid)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return &CodeResponse{code}, nil
+
+	authorized := a != nil && a.Scope.Equals(r.scope)
+
+	if !authorized && !r.prompted {
+		ctx.redirectAuthorization()
+		return nil
+	}
+
+	if r.prompted {
+		err := p.Store.StoreAuthorization(NewAuthorization(cid, uid, r.scope))
+		if err != nil {
+			return err
+		}
+	}
+
+	code, err := p.Tokenizer.Tokenize(tc, r.client.Keys.Sign)
+	if err != nil {
+		return err
+	}
+	v.Set("code", code)
+
+	ctx.redirect(r.redirect.StringWithParams(v))
+	return nil
 }
 
-func handleImplicitAuthorize(p *Provider, r *authorizationRequest) (formEncoded, error) {
-	return nil, nil
+func authorizeWithToken(ctx *context, r *authorizationRequest) error {
+	p := ctx.provider
+	c := r.client
+	v := url.Values{}
+	v.Set("state", r.state)
+
+	if c.GrantType != Implicit {
+		ctx.fail(r.redirect, ErrWrongGrant, r.state)
+		return nil
+	}
+
+	cid := r.client.ID
+	uid := r.session.Subject
+	a, err := p.Store.FetchAuthorization(cid, uid)
+	if err != nil {
+		return err
+	}
+	authorized := a != nil && a.Scope.Equals(r.scope)
+	if !authorized && !r.prompted {
+		ctx.redirectAuthorization()
+		return nil
+	}
+	if r.prompted {
+		err := p.Store.StoreAuthorization(NewAuthorization(cid, uid, r.scope))
+		if err != nil {
+			return err
+		}
+	}
+
+	tc := NewTokenClaims(ctx.timestamp, ctx.timestamp.Add(p.Issuer.ExpiryForToken(c.GrantType)))
+	tc.ID = randID()
+	tc.Audience = cid
+	tc.Subject = r.session.Subject
+	tc.Issuer = p.URL.String()
+	tc.Scope = r.scope
+	tc.Grant = "implicit"
+
+	at, err := p.Tokenizer.Tokenize(tc, r.client.Keys.Sign)
+	if err != nil {
+		return err
+	}
+
+	v.Set("access_token", at)
+	v.Set("expires_in", strconv.FormatInt(tc.Expires-time.Now().Unix(), 10))
+	ctx.redirect(r.redirect.StringWithFragment(v))
+	return nil
 }
 
-func handleAuthorize(p *Provider, w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	cid := q.Get("client_id")
+func handleAuthorize(ctx *context) error {
+	p := ctx.provider
+	err := ctx.request.ParseForm()
+	if err != nil {
+		ctx.abort(http.StatusBadRequest, "Bad request")
+		return nil
+	}
+	q := ctx.request.Form
+	if ctx.request.Method == "POST" {
+		q = ctx.request.PostForm
+	}
 	state := q.Get("state")
-	rt := q.Get("response_type")
 	scope := ParseScope(q.Get("scope"))
-
-	redirect, err := ParseURL(q.Get("redirect_uri"))
-	if err != nil {
-		panic(err) // TODO redirect and then spew
-	}
-
-	if rt != "code" && rt != "token" {
-		v := unsupportResponseType.Values()
-		v.Set("state", state)
-		http.Redirect(w, r, redirect.StringWithParams(v), http.StatusFound)
-		return
-	}
-
-	client, err := p.Store.FetchClient(cid)
-	if err != nil {
-		v := unexpectedError.Values()
-		v.Set("state", state)
-		http.Redirect(w, r, redirect.StringWithParams(v), http.StatusFound)
-		panic(err) // TODO redirect and then spew
-	}
-
-	if client == nil || client.Status != ClientActive {
-		v := clientNotFound.Values()
-		v.Set("state", state)
-		http.Redirect(w, r, redirect.StringWithParams(v), http.StatusFound)
-		panic(err) // TODO return invalid_client
-	}
-
-	sc, err := AuthenticateRequest(p.Authenticator, r)
-	if err != nil {
-		panic(err) // TODO redirect and then spew
-	}
-
-	req := &authorizationRequest{
-		p.Clock.Now(),
-		client,
-		sc,
-		redirect,
-		scope,
-		state,
-	}
-
-	var resp formEncoded
-
-	switch rt {
-	case "code":
-		resp, err = handleCodeAuthorize(p, req)
-	case "token":
-		resp, err = handleImplicitAuthorize(p, req)
-	}
-
-	if err != nil {
-		v := unexpectedError.Values()
-		v.Set("state", state)
-		http.Redirect(w, r, redirect.StringWithParams(v), http.StatusFound)
-		panic(err)
-	}
-
-	v := resp.Values()
+	prompted := ctx.request.Method == "POST"
+	v := url.Values{}
 	v.Set("state", state)
-	http.Redirect(w, r, redirect.StringWithParams(v), http.StatusFound)
+
+	ru, err := ParseURL(q.Get("redirect_uri"))
+	if err != nil {
+		ctx.abort(http.StatusBadRequest, "Bad redirect uri")
+		return nil
+	}
+
+	handler, found := authorizeHandlers[q.Get("response_type")]
+	if !found {
+		ctx.redirect(ru.StringWithParams(mergeValues(ErrUnsupportResponseType.Values(), v)))
+		return nil
+	}
+
+	client, err := p.Store.FetchClient(q.Get("client_id"))
+	if err != nil {
+		return err
+	}
+	if client == nil || client.Status != ClientActive {
+		ctx.redirect(ru.StringWithParams(mergeValues(ErrClientNotFound.Values(), v)))
+		return nil
+	}
+	if client.RedirectURI.String() != ru.String() {
+		ctx.redirect(ru.StringWithParams(mergeValues(ErrBadRedirect.Values(), v)))
+		return nil
+	}
+	if !client.Scope.Contains(scope) {
+		ctx.fail(ru, ErrScopeNotAllowed, state)
+		return nil
+	}
+
+	sc, err := authenticateRequest(ctx.request, p.Authenticator, client)
+	if err != nil {
+		panic(err) // TODO redirect and then spew
+	}
+
+	req := &authorizationRequest{client, sc, ru, scope, state, prompted}
+
+	return handler(ctx, req)
 }
 
-func handleToken(p *Provider, w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query()
-	cid := q.Get("client_id")
-	//csecret := q.Get("client_secret")
-	//code := q.Get("code")
-	//redirect := q.Get("redirect_uri")
-	//username := q.Get("username")
-	//password := q.Get("password")
+type grantRequest struct{}
 
-	client, err := p.Store.FetchClient(cid)
-	if err != nil {
-		panic(err) // TODO redirect and then spew
+var grantHandlers = map[string]func(*context, *grantRequest) error{
+	"authorization_code": grantWithCode,
+	"password":           grantWithPassword,
+	"client_credentials": grantWithClient,
+}
+
+func grantWithCode(*context, *grantRequest) error     { return errors.New("not implemented") }
+func grantWithPassword(*context, *grantRequest) error { return errors.New("not implemented") }
+func grantWithClient(*context, *grantRequest) error   { return errors.New("not implemented") }
+
+func handleToken(ctx *context) error {
+	if ctx.request.Method != "POST" {
+		ctx.abort(http.StatusMethodNotAllowed, "Method not allowed")
+		return nil
+	}
+	if err := ctx.request.ParseForm(); err != nil {
+		return err
 	}
 
-	if client.GrantType == AuthorizationCode {
-
+	f := ctx.request.PostForm
+	gt := f.Get("grant_type")
+	_, found := grantHandlers[gt]
+	if !found {
+		ctx.json(http.StatusBadRequest, ErrInvalidGrant)
+		return nil
 	}
 
+	return nil
 }

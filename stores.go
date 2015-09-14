@@ -5,8 +5,9 @@ type Store interface {
 	FetchClient(cid string) (*Client, error)
 	DeleteClient(cid string) error
 
-	RecordToken(tc *TokenClaims) error
-	FetchToken(jti string) (*TokenClaims, error)
 	BlacklistToken(jti string) error
 	TokenBlacklisted(jti string) (bool, error)
+
+	StoreAuthorization(a *Authorization) error
+	FetchAuthorization(cid string, sub string) (*Authorization, error)
 }

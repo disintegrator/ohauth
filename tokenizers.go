@@ -10,7 +10,7 @@ import (
 
 type Tokenizer interface {
 	Tokenize(tc *TokenClaims, signingKey []byte) (string, error)
-	Parse(token string, signingKey []byte) (*TokenClaims, error)
+	Parse(token string, verifyKey []byte) (*TokenClaims, error)
 }
 
 type jwtTokenizer struct {
@@ -45,7 +45,7 @@ func (t *jwtTokenizer) Tokenize(tc *TokenClaims, signingKey []byte) (string, err
 	return t.method.Sign(inp, signingKey)
 }
 
-func (t *jwtTokenizer) Parse(raw string, signingKey []byte) (*TokenClaims, error) {
+func (t *jwtTokenizer) Parse(raw string, verifyKey []byte) (*TokenClaims, error) {
 	if t.method == nil {
 		return nil, fmt.Errorf("No signing method specified")
 	}
@@ -53,7 +53,7 @@ func (t *jwtTokenizer) Parse(raw string, signingKey []byte) (*TokenClaims, error
 		if token.Method.Alg() != t.method.Alg() {
 			return nil, fmt.Errorf("Unexpected signing method: %v", token.Header["alg"])
 		}
-		return signingKey, nil
+		return verifyKey, nil
 	})
 	if err != nil {
 		return nil, err

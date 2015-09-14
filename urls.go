@@ -19,7 +19,7 @@ func ParseURL(raw string) (*StrictURL, error) {
 	u.Host = strings.TrimSpace(u.Host)
 	u.Scheme = "https"
 	u.RawQuery = ""
-	u.Fragment = ""
+	u.Fragment = "_=_"
 	if u.Host == "" || !u.IsAbs() {
 		return nil, errors.New("absolute urls with host are required")
 	}
@@ -82,5 +82,11 @@ func (u *StrictURL) Clone() *StrictURL {
 func (u *StrictURL) StringWithParams(v url.Values) string {
 	c := u.Clone()
 	c.RawQuery = v.Encode()
+	return c.String()
+}
+
+func (u *StrictURL) StringWithFragment(v url.Values) string {
+	c := u.Clone()
+	c.Fragment = v.Encode()
 	return c.String()
 }
