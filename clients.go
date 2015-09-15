@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/pem"
 	"time"
 )
@@ -31,7 +32,7 @@ func NewClient(displayName string, grantType string) *Client {
 		DisplayName: displayName,
 		GrantType:   grantType,
 		Created:     time.Now(),
-		Secret:      string(randBytes(30)),
+		Secret:      base64.URLEncoding.EncodeToString(randBytes(30)),
 		Keys:        NewClientKeys(),
 		Scope:       ParseScope(""),
 	}
