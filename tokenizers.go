@@ -1,7 +1,6 @@
 package ohauth
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/dgrijalva/jwt-go"
@@ -26,23 +25,9 @@ func (t *jwtTokenizer) Tokenize(tc *TokenClaims, signingKey []byte) (string, err
 		return "", fmt.Errorf("Token expiry not set")
 	}
 
-	header, err := json.Marshal(struct {
-		Type      string `json:"typ"`
-		Algorithm string `json:"alg"`
-	}{"jwt", t.method.Alg()})
-	if err != nil {
-		return "", err
-	}
-
-	body, err := json.Marshal(tc)
-	if err != nil {
-		return "", err
-	}
-
-	h64 := jwt.EncodeSegment(header)
-	b64 := jwt.EncodeSegment(body)
-	inp := fmt.Sprintf("%s.%s", h64, b64)
-	return t.method.Sign(inp, signingKey)
+	token := jwt.New(t.method)
+	token.Claims = tc.Map()
+	return token.SignedString(signingKey)
 }
 
 func (t *jwtTokenizer) Parse(raw string, verifyKey []byte) (*TokenClaims, error) {
