@@ -40,10 +40,16 @@ func NewProvider(u *StrictURL, authn Authenticator, store Store) *Provider {
 func (p *Provider) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(p.URL.Path+"/authorize", func(w http.ResponseWriter, r *http.Request) {
-		handleAuthorize(&context{p, w, r, time.Now()})
+		defer r.Body.Close()
+		if err := handleAuthorize(&context{p, w, r, time.Now()}); err != nil {
+			panic(err)
+		}
 	})
 	mux.HandleFunc(p.URL.Path+"/token", func(w http.ResponseWriter, r *http.Request) {
-		handleToken(&context{p, w, r, time.Now()})
+		defer r.Body.Close()
+		if err := handleGrant(&context{p, w, r, time.Now()}); err != nil {
+			panic(err)
+		}
 	})
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
