@@ -11,14 +11,14 @@ type Issuer interface {
 type defaultIssuer struct{}
 
 func (d *defaultIssuer) ExpiryForCode() time.Duration {
-	return 5 * time.Minute
+	return 60 * time.Minute
 }
 
 func (d *defaultIssuer) ExpiryForToken(grantType string) time.Duration {
 	switch grantType {
 	case Implicit:
 		return 2 * time.Hour
-	case Refresh:
+	case RefreshToken:
 		return 60 * 24 * time.Hour
 	default:
 		return 24 * time.Hour

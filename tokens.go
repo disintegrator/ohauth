@@ -47,9 +47,10 @@ func (tc *TokenClaims) Map() map[string]interface{} {
 	return m
 }
 
-func NewTokenClaims(iat time.Time, exp time.Time) *TokenClaims {
+func NewTokenClaims(role string, iat time.Time, exp time.Time) *TokenClaims {
 	return &TokenClaims{
 		ID:      randID(),
+		Role:    role,
 		Expires: exp.Unix(),
 		Issued:  iat.Unix(),
 	}

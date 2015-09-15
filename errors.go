@@ -47,4 +47,6 @@ var (
 	ErrUnsupportResponseType = NewError(UnsupportedResponseType, "unsupported response type")
 	ErrBadRedirect           = NewError(InvalidRequest, "invalid redirect uri")
 	ErrAccessDenied          = NewError(AccessDenied, "access denied")
+	ErrUnauthorized          = NewError(UnauthorizedClient, "unauthorized client")
+	ErrCodeUsed              = NewError(InvalidRequest, "authorization code has already been used")
 )
