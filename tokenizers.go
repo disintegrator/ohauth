@@ -2,6 +2,7 @@ package ohauth
 
 import (
 	"fmt"
+	"reflect"
 
 	"github.com/dgrijalva/jwt-go"
 	"github.com/mitchellh/mapstructure"
@@ -43,13 +44,23 @@ func (t *jwtTokenizer) Parse(raw string, verifyKey []byte) (*TokenClaims, error)
 	if err != nil {
 		return nil, err
 	}
-	if !token.Valid {
-		return nil, nil
-	}
 
 	tc := &TokenClaims{}
 
-	err = mapstructure.Decode(token.Claims, tc)
+	d, err := mapstructure.NewDecoder(&mapstructure.DecoderConfig{
+		Result:  tc,
+		TagName: "json",
+		DecodeHook: func(from, to reflect.Type, data interface{}) (interface{}, error) {
+			if from.Kind() == reflect.String && to.Kind() == reflect.TypeOf(tc.Scope).Kind() {
+				return ParseScope(data.(string)), nil
+			}
+			return data, nil
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	err = d.Decode(token.Claims)
 	if err != nil {
 		return nil, err
 	}
