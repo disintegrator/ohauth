@@ -1,9 +1,9 @@
 package ohauth
 
 const (
-	AuthorizationCode = "code"
+	AuthorizationCode = "authorization_code"
 	Implicit          = "implicit"
 	Password          = "password"
-	ClientCredentials = "client"
-	Refresh           = "refresh"
+	ClientCredentials = "client_credentials"
+	RefreshToken      = "refresh_token"
 )
