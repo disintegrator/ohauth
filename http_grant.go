@@ -189,7 +189,7 @@ func grantWithClient(ctx *context, gr *grantRequest) error {
 	at.Subject = c.ID
 	at.Issuer = p.URL.String()
 	at.Scope = scope
-	at.Grant = Password
+	at.Grant = ClientCredentials
 
 	sat, err := p.Tokenizer.Tokenize(at, c.Keys.Sign)
 	if err != nil {
