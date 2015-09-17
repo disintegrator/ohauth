@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var ErrNotAbsoluteURL = errors.New("absolute urls with host are required")
+
 // StrictURL is similar to the standard net/url.URL type except that it can be
 // json marshalled and unmarshalled and forces all parsed urls to https protocol
 type StrictURL url.URL
@@ -21,7 +23,7 @@ func ParseURL(raw string) (*StrictURL, error) {
 	u.RawQuery = ""
 	u.Fragment = "_=_"
 	if u.Host == "" || !u.IsAbs() {
-		return nil, errors.New("absolute urls with host are required")
+		return nil, ErrNotAbsoluteURL
 	}
 	return (*StrictURL)(u), err
 }
@@ -67,7 +69,8 @@ func (u *StrictURL) Compare(u2 *StrictURL) bool {
 	if u == nil || u2 == nil {
 		return false
 	}
-	s1, s2 := u.String(), u2.String()
+	s1 := u.String()
+	s2 := u2.String()
 	return s1 != "" && s2 != "" && s1 == s2
 }
 
