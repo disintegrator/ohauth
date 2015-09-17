@@ -64,6 +64,12 @@ install the handlers into a gin app. The implementation of the Authenticator
 - [Common OAuth2 Vulnerabilities and Mitigation Techniques][3]
 - [OAuth1, OAuth2, OAuth...?][4]
 
+## TODO
+
+- A ton of tests
+
+Contributions are more than welcome!
+
 [1]: https://tools.ietf.org/html/rfc6819
 [2]: http://www.oauthsecurity.com/
 [3]: http://leastprivilege.com/2013/03/15/common-oauth2-vulnerabilities-and-mitigation-techniques/
