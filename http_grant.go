@@ -3,7 +3,6 @@ package ohauth
 import (
 	"crypto/subtle"
 	"errors"
-	"fmt"
 	"net/http"
 	"net/url"
 	"time"
@@ -76,7 +75,6 @@ func grantWithCode(ctx *context, gr *grantRequest) error {
 	iss := tc.Issuer == p.URL.String()
 	exp := tc.Expires > ctx.timestamp.Unix()
 	grant := tc.Grant == AuthorizationCode
-	fmt.Println(role, aud, iss, exp, grant)
 	if !role || !aud || !iss || !exp || !grant || !scope {
 		ctx.json(http.StatusForbidden, ErrAccessDenied)
 		return nil
