@@ -18,7 +18,7 @@ type authorizationRequest struct {
 	client   *Client
 	session  *TokenClaims
 	redirect *StrictURL
-	scope    *Scope
+	scope    Scope
 	state    string
 	prompted bool
 }

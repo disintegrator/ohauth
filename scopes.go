@@ -3,120 +3,78 @@ package ohauth
 import (
 	"encoding/json"
 	"regexp"
-	"sort"
 	"strings"
-	"sync"
 )
 
-var opRE = regexp.MustCompile(`^[a-zA-Z]+(?::[a-zA-Z]+)*$`)
+var actionRE = regexp.MustCompile(`^\w+$`)
 
-type Scope struct {
-	sync.Mutex
-	set map[string]bool
-}
+type Scope map[string]bool
 
-func NewScope(actions ...string) *Scope {
-	s := &Scope{set: make(map[string]bool, 0)}
-	s.Add(actions...)
+func ParseScope(raw string) Scope {
+	split := strings.Split(raw, ",")
+	for i, v := range split {
+		split[i] = strings.TrimSpace(v)
+	}
+	s := Scope{}
+	s.Add(split...)
 	return s
 }
 
-func ParseScope(raw string) *Scope {
-	split := strings.Split(raw, ",")
-	scope := &Scope{set: make(map[string]bool, 0)}
-	scope.Add(split...)
-	return scope
-}
-
-func (s *Scope) String() string {
-	xs := make([]string, len(s.set))
-	i := 0
-	for k := range s.set {
-		xs[i] = k
-		i++
-	}
-	sort.Strings(xs)
-	return strings.Join(xs, ",")
-}
-
-func (s *Scope) Len() int {
-	return len(s.set)
-}
-
-func (s *Scope) addOne(op string) {
-	if !opRE.MatchString(op) {
+func (s Scope) addOne(action string) {
+	if !actionRE.MatchString(action) {
 		return
 	}
-	clean := strings.Split(op, ":")
-	for i := 1; i <= len(clean); i++ {
-		segment := strings.Join(clean[:i], ":")
-		if _, found := s.set[segment]; found {
-			return
+	s[action] = true
+}
+
+func (s Scope) Add(actions ...string) {
+	for _, action := range actions {
+		s.addOne(action)
+	}
+}
+
+func (s Scope) Contains(s2 Scope) bool {
+	res := true
+	for k2, _ := range s2 {
+		_, ok := s[k2]
+		res = res && ok
+		if !res {
+			break
 		}
+
 	}
-	s.set[op] = true
+	return res
 }
 
-func (s *Scope) Add(ops ...string) {
-	s.Lock()
-	defer s.Unlock()
-	for _, scope := range ops {
-		s.addOne(scope)
-	}
+func (s Scope) Equals(s2 Scope) bool {
+	return len(s) == len(s2) && s.Contains(s2)
 }
 
-func (s *Scope) Has(op string) bool {
-	clean := strings.Split(op, ":")
-	for i := 1; i <= len(clean); i++ {
-		segment := strings.Join(clean[:i], ":")
-		if _, found := s.set[segment]; found {
-			return true
-		}
+func (s Scope) Values() []string {
+	out := make([]string, len(s))
+	i := 0
+	for k, _ := range s {
+		out[i] = k
+		i++
 	}
-	return false
+	return out
 }
 
-func (s *Scope) Contains(sub *Scope) bool {
-	found := len(sub.set) == 0
-	for k := range sub.set {
-		found = found || s.Has(k)
-	}
-	return found
+func (s Scope) String() string {
+	return strings.Join(s.Values(), ",")
 }
 
-func (a *Scope) Equals(b *Scope) bool {
-	la := len(a.set)
-	lb := len(b.set)
-	if la != lb {
-		return false
-	}
-
-	for k := range b.set {
-		if _, exists := a.set[k]; !exists {
-			return false
-		}
-	}
-	return true
+func (s Scope) MarshalJSON() ([]byte, error) {
+	return json.Marshal(s.String())
 }
 
-func (s *Scope) MarshalJSON() ([]byte, error) {
-	l := make([]string, 0, len(s.set))
-	for k, v := range s.set {
-		if v {
-			l = append(l, string(k))
-		}
-	}
-	return json.Marshal(strings.Join(l, ","))
-}
-
-func (s *Scope) UnmarshalJSON(raw []byte) error {
-	var in string
-	if err := json.Unmarshal(raw, &in); err != nil {
+func (s *Scope) UnmarshalJSON(inp []byte) error {
+	raw := ""
+	if err := json.Unmarshal(inp, &raw); err != nil {
 		return err
 	}
-	tokens := strings.Split(in, ",")
-	set := make(map[string]bool, len(tokens))
-	*s = Scope{set: set}
-	s.Add(tokens...)
+
+	*s = ParseScope(raw)
+
 	return nil
 }

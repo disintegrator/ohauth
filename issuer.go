@@ -5,7 +5,7 @@ import "time"
 type Issuer interface {
 	ExpiryForToken(grantType string) time.Duration
 	ExpiryForCode() time.Duration
-	ScopePermitted(scope *Scope, grantType string) bool
+	ScopePermitted(scope Scope, grantType string) bool
 }
 
 type defaultIssuer struct{}
@@ -25,6 +25,6 @@ func (d *defaultIssuer) ExpiryForToken(grantType string) time.Duration {
 	}
 }
 
-func (*defaultIssuer) ScopePermitted(*Scope, string) bool {
+func (*defaultIssuer) ScopePermitted(Scope, string) bool {
 	return true
 }

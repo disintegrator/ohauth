@@ -20,7 +20,7 @@ type Client struct {
 	Secret      string      `json:"secret"`
 	GrantType   string      `json:"grantType"`
 	RedirectURI *StrictURL  `json:"redirectURI"`
-	Scope       *Scope      `json:"scope"`
+	Scope       Scope       `json:"scope"`
 	Status      string      `json:"status"`
 	Created     time.Time   `json:"created"`
 	Keys        *ClientKeys `json:"keys"`
@@ -71,11 +71,11 @@ func NewClientKeys() *ClientKeys {
 type Authorization struct {
 	CID     string    `json:"cid"`
 	UID     string    `json:"uid"`
-	Scope   *Scope    `json:"scope"`
+	Scope   Scope     `json:"scope"`
 	Active  bool      `json:"active"`
 	Created time.Time `json:"created"`
 }
 
-func NewAuthorization(cid, uid string, scope *Scope) *Authorization {
+func NewAuthorization(cid, uid string, scope Scope) *Authorization {
 	return &Authorization{cid, uid, scope, true, time.Now()}
 }

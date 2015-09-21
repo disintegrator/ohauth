@@ -22,7 +22,7 @@ type TokenClaims struct {
 	Issuer   string `json:"iss"`
 	Subject  string `json:"sub"`
 	Grant    string `json:"grant"`
-	Scope    *Scope `json:"scope,omitempty"`
+	Scope    Scope  `json:"scope,omitempty"`
 	Nonce    string `json:"nonce,omitempty"`
 }
 

@@ -10,7 +10,7 @@ import (
 
 func BenchmarkAuthorize_code(b *testing.B) {
 	client := NewClient("Test Client", AuthorizationCode)
-	client.Scope = NewScope("openid", "email")
+	client.Scope = ParseScope("openid,email")
 	client.Status = ClientActive
 	client.RedirectURI = MustParseURL("http://example.com")
 	err := testProvider.Store.CreateClient(client)
@@ -51,7 +51,7 @@ func BenchmarkAuthorize_code(b *testing.B) {
 
 func BenchmarkAuthorize_implicit(b *testing.B) {
 	client := NewClient("Test Client", Implicit)
-	client.Scope = NewScope("openid", "email")
+	client.Scope = ParseScope("openid,email")
 	client.Status = ClientActive
 	client.RedirectURI = MustParseURL("http://example.com")
 	err := testProvider.Store.CreateClient(client)
