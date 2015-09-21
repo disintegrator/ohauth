@@ -37,6 +37,7 @@ func NewProvider(u *StrictURL, authn Authenticator, store Store) *Provider {
 	}
 }
 
+// Handler returns an http.Handler that can be integrated into web applications
 func (p *Provider) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(p.URL.Path+"/authorize", func(w http.ResponseWriter, r *http.Request) {

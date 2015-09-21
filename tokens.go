@@ -2,10 +2,7 @@ package ohauth
 
 import "time"
 
-const (
-	BearerToken = "Bearer"
-)
-
+// Role identifies the role of a JWT token
 const (
 	RoleIdentity     = "identity"
 	RoleCode         = "code"
@@ -13,6 +10,8 @@ const (
 	RoleRefreshToken = "refresh_token"
 )
 
+// TokenClaims captures information about a token or code that is issued to
+// clients
 type TokenClaims struct {
 	ID       string `json:"jti"`
 	Role     string `json:"role"`
@@ -26,27 +25,8 @@ type TokenClaims struct {
 	Nonce    string `json:"nonce,omitempty"`
 }
 
-func (tc *TokenClaims) Map() map[string]interface{} {
-	m := map[string]interface{}{
-		"jti":   tc.ID,
-		"role":  tc.Role,
-		"aud":   tc.Audience,
-		"exp":   tc.Expires,
-		"iat":   tc.Issued,
-		"iss":   tc.Issuer,
-		"sub":   tc.Subject,
-		"grant": tc.Grant,
-	}
-
-	if tc.Scope != nil {
-		m["scope"] = tc.Scope
-	}
-	if tc.Nonce != "" {
-		m["nonce"] = tc.Nonce
-	}
-	return m
-}
-
+// NewTokenClaims creates an instance of TokenClaims initialised with some basic
+// claims include an ID, role, issue date and expiry
 func NewTokenClaims(role string, iat time.Time, exp time.Time) *TokenClaims {
 	return &TokenClaims{
 		ID:      randID(),

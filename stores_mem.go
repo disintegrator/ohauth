@@ -5,6 +5,8 @@ import (
 	"sync"
 )
 
+// TestingStore is a Store implementation that may be used for testing and
+// experimenting with OhAuth. It is a simple memory-based store.
 type TestingStore struct {
 	*sync.Mutex
 	authz     map[string]*Authorization
@@ -13,6 +15,7 @@ type TestingStore struct {
 	blacklist map[string]bool
 }
 
+// NewTestingStore creates an instace of a TestingStore
 func NewTestingStore() (*TestingStore, error) {
 	return &TestingStore{
 		&sync.Mutex{},
@@ -23,6 +26,7 @@ func NewTestingStore() (*TestingStore, error) {
 	}, nil
 }
 
+// CreateClient stores a client
 func (s *TestingStore) CreateClient(c *Client) error {
 	s.Lock()
 	defer s.Unlock()
@@ -30,10 +34,12 @@ func (s *TestingStore) CreateClient(c *Client) error {
 	return nil
 }
 
+// FetchClient retrieves a client by its id
 func (s *TestingStore) FetchClient(cid string) (*Client, error) {
 	return s.clients[cid], nil
 }
 
+// DeleteClient deletes a client by its id
 func (s *TestingStore) DeleteClient(cid string) error {
 	s.Lock()
 	defer s.Unlock()
@@ -41,17 +47,20 @@ func (s *TestingStore) DeleteClient(cid string) error {
 	return nil
 }
 
-func (s *TestingStore) BlacklistToken(jti string) error {
+// BlacklistToken invalidate codes and tokens using a token ID
+func (s *TestingStore) BlacklistToken(id string) error {
 	s.Lock()
 	defer s.Unlock()
-	s.blacklist[jti] = true
+	s.blacklist[id] = true
 	return nil
 }
 
-func (s *TestingStore) TokenBlacklisted(jti string) (bool, error) {
-	return s.blacklist[jti], nil
+// TokenBlacklisted is used to check if a code or token is invalidated
+func (s *TestingStore) TokenBlacklisted(id string) (bool, error) {
+	return s.blacklist[id], nil
 }
 
+// StoreAuthorization records a resource owner's authorisation of a client
 func (s *TestingStore) StoreAuthorization(a *Authorization) error {
 	s.Lock()
 	defer s.Unlock()
@@ -59,6 +68,7 @@ func (s *TestingStore) StoreAuthorization(a *Authorization) error {
 	return nil
 }
 
+// FetchAuthorization retrieves an Authorization record
 func (s *TestingStore) FetchAuthorization(cid, uid string) (*Authorization, error) {
 	return s.authz[fmt.Sprintf("%s:%s", cid, uid)], nil
 }
