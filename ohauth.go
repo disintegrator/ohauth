@@ -40,13 +40,13 @@ func NewProvider(u *StrictURL, authn Authenticator, store Store) *Provider {
 func (p *Provider) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc(p.URL.Path+"/authorize", func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		if err := handleAuthorize(&context{p, w, r, time.Now()}); err != nil {
 			panic(err)
 		}
 	})
 	mux.HandleFunc(p.URL.Path+"/token", func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
+		defer func() { _ = r.Body.Close() }()
 		if err := handleGrant(&context{p, w, r, time.Now()}); err != nil {
 			panic(err)
 		}
@@ -55,9 +55,11 @@ func (p *Provider) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" || r.Method == "POST" {
 			mux.ServeHTTP(w, r)
-		} else {
-			w.WriteHeader(http.StatusMethodNotAllowed)
-			w.Write([]byte("Method not allowed"))
+		}
+
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		if _, err := w.Write([]byte("Method not allowed")); err != nil {
+			panic(err)
 		}
 	})
 }

@@ -46,11 +46,11 @@ func (u *StrictURL) UnmarshalJSON(b []byte) error {
 	if err := json.Unmarshal(b, &s); err != nil {
 		return err
 	}
-	if in, err := url.Parse(s); err != nil {
+	in, err := url.Parse(s)
+	if err != nil {
 		return err
-	} else {
-		*u = StrictURL(*in)
 	}
+	*u = StrictURL(*in)
 	return nil
 }
 

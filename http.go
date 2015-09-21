@@ -34,13 +34,17 @@ func (c *context) fail(ru *StrictURL, e *Error, state string) {
 	c.redirect(ru.StringWithParams(v))
 }
 
-func (c *context) json(s int, o interface{}) error {
+func (c *context) json(s int, o interface{}) {
 	c.writer.Header().Set("Content-Type", "application/json; charset=utf-8")
 	c.writer.WriteHeader(s)
-	return json.NewEncoder(c.writer).Encode(o)
+	if err := json.NewEncoder(c.writer).Encode(o); err != nil {
+		panic(err)
+	}
 }
 
 func (c *context) abort(status int, msg string) {
 	c.writer.WriteHeader(status)
-	c.writer.Write([]byte(msg))
+	if _, err := c.writer.Write([]byte(msg)); err != nil {
+		panic(err)
+	}
 }
