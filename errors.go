@@ -5,11 +5,13 @@ import (
 	"net/url"
 )
 
+// Error defines an OAuth error with fields specified in rfc6749
 type Error struct {
 	Code        string `json:"error"`
 	Description string `json:"error_description,omitempty"`
 }
 
+// NewError creates a populated error instance
 func NewError(ec, desc string) *Error {
 	return &Error{ec, desc}
 }
@@ -18,6 +20,8 @@ func (e *Error) Error() string {
 	return fmt.Sprintf("%s - %s", e.Code, e.Description)
 }
 
+// Values returns a representation of an Error that can be used as query
+// parameters in a redirect uri
 func (e *Error) Values() url.Values {
 	v := url.Values{}
 	v.Set("error", e.Code)
@@ -25,6 +29,7 @@ func (e *Error) Values() url.Values {
 	return v
 }
 
+// Error codes as specified throughout rfc6749
 const (
 	AccessDenied            = "access_denied"
 	InvalidClient           = "invalid_client"
@@ -38,6 +43,8 @@ const (
 	UnsupportedResponseType = "unsupported_response_type"
 )
 
+// Common errors that can occur while processing authorization and token
+// requests
 var (
 	ErrClientNotFound        = NewError(InvalidClient, "client not found")
 	ErrScopeNotAllowed       = NewError(InvalidScope, "client cannot offer requested scope")
