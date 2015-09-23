@@ -172,7 +172,7 @@ func handleAuthorize(ctx *context) error {
 		return nil
 	}
 
-	sc, err := authenticateRequest(ctx.request, p.Authenticator, client)
+	sc, err := p.Authenticator.AuthenticateRequest(ctx.request, client)
 	if err != nil {
 		panic(err) // TODO redirect and then spew
 	}

@@ -123,7 +123,7 @@ func grantWithPassword(ctx *context, gr *grantRequest) error {
 	username := f.Get("username")
 	password := f.Get("password")
 
-	s, err := p.Authenticator.Authenticate(username, password, c)
+	s, err := p.Authenticator.AuthenticateCredentials(username, password, c)
 	if err != nil {
 		return err
 	}
